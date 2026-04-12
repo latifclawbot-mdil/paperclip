@@ -15,6 +15,7 @@ import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { IssuesList } from "../components/IssuesList";
 import { PageTabBar } from "../components/PageTabBar";
+import { hasRunningRuntimeServices, WorkspaceRuntimeControls } from "../components/WorkspaceRuntimeControls";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -64,10 +65,6 @@ function isSafeExternalUrl(value: string | null | undefined) {
 
 function readText(value: string | null | undefined) {
   return value ?? "";
-}
-
-function hasActiveRuntimeServices(workspace: ExecutionWorkspace | null | undefined) {
-  return (workspace?.runtimeServices ?? []).some((service) => service.status === "starting" || service.status === "running");
 }
 
 function formatJson(value: Record<string, unknown> | null | undefined) {
@@ -452,6 +449,10 @@ export function ExecutionWorkspaceDetail() {
   }
   if (!workspace || !form || !initialState) return null;
 
+  const canStartRuntimeServices = Boolean(effectiveRuntimeConfig) && Boolean(workspace.cwd);
+  const runtimeServicesRunning = hasRunningRuntimeServices(workspace.runtimeServices);
+  const pendingRuntimeAction = controlRuntimeServices.isPending ? controlRuntimeServices.variables ?? null : null;
+
   if (workspaceId && activeTab === null) {
     let cachedTab: ExecutionWorkspaceTab = "configuration";
     try {
@@ -530,37 +531,16 @@ export function ExecutionWorkspaceDetail() {
                     : "none"}
               </p>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                disabled={controlRuntimeServices.isPending || !effectiveRuntimeConfig || !workspace.cwd}
-                onClick={() => controlRuntimeServices.mutate("start")}
-              >
-                {controlRuntimeServices.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                Start
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                disabled={controlRuntimeServices.isPending || !effectiveRuntimeConfig || !workspace.cwd}
-                onClick={() => controlRuntimeServices.mutate("restart")}
-              >
-                Restart
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                disabled={controlRuntimeServices.isPending || !hasActiveRuntimeServices(workspace)}
-                onClick={() => controlRuntimeServices.mutate("stop")}
-              >
-                Stop
-              </Button>
-            </div>
           </div>
+          <WorkspaceRuntimeControls
+            className="mt-4"
+            isRunning={runtimeServicesRunning}
+            canStart={canStartRuntimeServices}
+            isPending={controlRuntimeServices.isPending}
+            pendingAction={pendingRuntimeAction}
+            disabledHint="Execution workspaces need both a working directory and runtime config before services can be started."
+            onAction={(action) => controlRuntimeServices.mutate(action)}
+          />
           <Separator className="my-4" />
           {workspace.runtimeServices && workspace.runtimeServices.length > 0 ? (
             <div className="space-y-3">

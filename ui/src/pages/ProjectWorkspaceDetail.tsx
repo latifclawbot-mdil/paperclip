@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChoosePathButton } from "../components/PathInstructionsModal";
 import { projectsApi } from "../api/projects";
+import { hasRunningRuntimeServices, WorkspaceRuntimeControls } from "../components/WorkspaceRuntimeControls";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -59,10 +60,6 @@ function isAbsolutePath(value: string) {
 
 function readText(value: string | null | undefined) {
   return value ?? "";
-}
-
-function hasActiveRuntimeServices(workspace: ProjectWorkspace | null | undefined) {
-  return (workspace?.runtimeServices ?? []).some((service) => service.status === "starting" || service.status === "running");
 }
 
 function formatJson(value: Record<string, unknown> | null | undefined) {
@@ -338,6 +335,10 @@ export function ProjectWorkspaceDetail() {
     return <p className="text-sm text-muted-foreground">Workspace not found for this project.</p>;
   }
 
+  const canStartRuntimeServices = Boolean(workspace.runtimeConfig?.workspaceRuntime) && Boolean(workspace.cwd);
+  const runtimeServicesRunning = hasRunningRuntimeServices(workspace.runtimeServices);
+  const pendingRuntimeAction = controlRuntimeServices.isPending ? controlRuntimeServices.variables ?? null : null;
+
   const saveChanges = () => {
     const validationError = validateWorkspaceForm(form);
     if (validationError) {
@@ -604,37 +605,16 @@ export function ProjectWorkspaceDetail() {
                   Shared services for this project workspace. Execution workspaces inherit this config unless they override it.
                 </p>
               </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  disabled={controlRuntimeServices.isPending || !workspace.runtimeConfig?.workspaceRuntime || !workspace.cwd}
-                  onClick={() => controlRuntimeServices.mutate("start")}
-                >
-                  {controlRuntimeServices.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                  Start
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  disabled={controlRuntimeServices.isPending || !workspace.cwd}
-                  onClick={() => controlRuntimeServices.mutate("restart")}
-                >
-                  Restart
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  disabled={controlRuntimeServices.isPending || !hasActiveRuntimeServices(workspace)}
-                  onClick={() => controlRuntimeServices.mutate("stop")}
-                >
-                  Stop
-                </Button>
-              </div>
             </div>
+            <WorkspaceRuntimeControls
+              className="mt-4"
+              isRunning={runtimeServicesRunning}
+              canStart={canStartRuntimeServices}
+              isPending={controlRuntimeServices.isPending}
+              pendingAction={pendingRuntimeAction}
+              disabledHint="Project workspaces need both a working directory and runtime config before services can be started."
+              onAction={(action) => controlRuntimeServices.mutate(action)}
+            />
             <Separator className="my-4" />
             {workspace.runtimeServices && workspace.runtimeServices.length > 0 ? (
               <div className="space-y-3">
