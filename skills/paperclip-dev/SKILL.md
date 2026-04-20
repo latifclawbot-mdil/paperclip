@@ -159,6 +159,56 @@ These rules exist because agents have caused real damage by improvising around C
 
 5. **Seeding is a CLI operation.** When asked to seed a worktree database from the main instance, use `worktree reseed` or recreate with `worktree:make --seed-mode full`. Read `doc/DEVELOPING.md` for the full option tables. Never attempt manual database copying.
 
+## Persistent Dev Servers (for Manual Testing)
+
+When an agent needs to start a dev server that outlives the current heartbeat — for example, so a human or QA agent can manually test against it — the server process **must** be launched in a detached session. A process started directly from a heartbeat shell is killed when the heartbeat exits.
+
+### Use `tmux` for persistent servers
+
+```bash
+# 1. cd into the worktree (or main repo) and source the environment
+cd <worktree-path>
+eval "$(npx paperclipai worktree env)"   # skip if using the primary instance
+
+# 2. Start the dev server in a named, detached tmux session
+tmux new-session -d -s <session-name> 'pnpm dev'
+
+# Example with a descriptive name:
+tmux new-session -d -s papa81-auth-3102 'pnpm dev'
+```
+
+### Managing the session
+
+| Task | Command |
+|------|---------|
+| Check if the session is alive | `tmux has-session -t <session-name> 2>/dev/null && echo running` |
+| View server output | `tmux capture-pane -t <session-name> -p` |
+| Kill the session | `tmux kill-session -t <session-name>` |
+| List all tmux sessions | `tmux list-sessions` |
+
+### Verifying the server is reachable
+
+After launching, confirm the port is listening before reporting success:
+
+```bash
+# Wait briefly for startup, then verify
+sleep 3
+curl -sf http://127.0.0.1:<port>/api/health && echo "Server is up"
+lsof -nP -iTCP:<port> -sTCP:LISTEN
+```
+
+### Why this matters
+
+In PAPA-81, the dev server was started with `pnpm dev` directly from the agent shell. It appeared healthy during the heartbeat, but died as soon as the heartbeat exited. QA repeatedly found the port unreachable seconds later. Switching to a detached `tmux` session solved the problem — the server survived across heartbeats and remained available for manual testing.
+
+### Key rules
+
+1. **Always use `tmux` (or equivalent)** when a dev server needs to stay running after the heartbeat ends.
+2. **Name the session descriptively** — include the issue or worktree name and port (e.g., `papa81-auth-3102`).
+3. **Verify the server is listening** before reporting the URL to anyone.
+4. **Do not use `nohup` or `&` alone** — these are unreliable for agent shells that may have their entire process group killed.
+5. **Clean up when done** — kill the tmux session when the testing is complete.
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -172,3 +222,4 @@ These rules exist because agents have caused real damage by improvising around C
 | Running agents against wrong instance | Verify `PAPERCLIP_API_URL` points to the correct port |
 | CLI command fails | Do NOT work around it — report the error and block (see Hard Rules above) |
 | Agent tries manual postgres operations | NEVER do this — all DB ops go through the CLI (see Hard Rules above) |
+| Dev server dies between heartbeats | Launch in a detached `tmux` session — see "Persistent Dev Servers" above |
