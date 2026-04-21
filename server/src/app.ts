@@ -2,8 +2,13 @@ import express, { Router, type Request as ExpressRequest } from "express";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Db } from "@paperclipai/db";
-import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
+import type { Db, DeploymentExposure, DeploymentMode } from "@paperclipai/db";
+import type {
+  PaperclipPluginManifestV1,
+  PluginCapability,
+  PluginCapabilityPolicy,
+  PluginCompanySettingsJson,
+} from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
 import { httpLogger, errorHandler } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
@@ -79,6 +84,28 @@ const VITE_DEV_STATIC_PATHS = new Set([
   "/site.webmanifest",
   "/sw.js",
 ]);
+
+function mergeCapabilityPolicies(
+  manifest: PaperclipPluginManifestV1,
+  installedPolicy?: PluginCapabilityPolicy,
+): PluginCapabilityPolicy | undefined {
+  if (!installedPolicy) return undefined;
+
+  const mode = installedPolicy.mode;
+  const grants = Object.fromEntries(
+    manifest.capabilities
+      .map((capability) => {
+        const value = installedPolicy.grants?.[capability];
+        return value === undefined ? null : [capability, value];
+      })
+      .filter((entry): entry is [PluginCapability, boolean] => entry !== null),
+  ) as Partial<Record<PluginCapability, boolean>>;
+
+  return {
+    ...(mode ? { mode } : {}),
+    ...(Object.keys(grants).length > 0 ? { grants } : {}),
+  };
+}
 
 export function resolveViteHmrPort(serverPort: number): number {
   if (serverPort <= 55_535) {
@@ -248,14 +275,25 @@ export async function createApp(
         instanceId: opts.instanceId ?? "default",
         hostVersion: opts.hostVersion ?? "0.0.0",
       },
-      buildHostHandlers: (pluginId, manifest) => {
+      buildHostHandlers: async (pluginId, manifest) => {
         const notifyWorker = (method: string, params: unknown) => {
           const handle = workerManager.getWorker(pluginId);
           if (handle) handle.notify(method, params);
         };
+        const pluginRow = await db.query.plugins.findFirst({
+          where: (plugins, { eq }) => eq(plugins.id, pluginId),
+          columns: { settingsJson: true },
+        });
         const services = buildHostServices(db, pluginId, manifest.id, eventBus, notifyWorker);
         hostServicesDisposers.set(pluginId, () => services.dispose());
-        const effectiveCapabilities = resolveEffectiveCapabilities(manifest);
+        const installedPolicy = (pluginRow?.settingsJson ?? {}) as PluginCompanySettingsJson;
+        const effectiveCapabilities = resolveEffectiveCapabilities(
+          manifest,
+          mergeCapabilityPolicies(
+            manifest,
+            installedPolicy.capabilityPolicy,
+          ),
+        );
         return createHostClientHandlers({
           pluginId,
           capabilities: effectiveCapabilities,

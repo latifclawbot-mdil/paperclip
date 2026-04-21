@@ -423,7 +423,7 @@ export type {
   PluginMemoryNamespacePolicy,
   PluginMemoryPolicy,
   PluginCapabilityPolicy,
-  PluginCompanySettingsJson,
+  PluginCompanySettingsShape,
   PluginRecord,
   PluginDatabaseNamespaceRecord,
   PluginMigrationRecord,

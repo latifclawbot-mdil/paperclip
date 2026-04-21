@@ -16,6 +16,7 @@ import {
   PLUGIN_API_ROUTE_CHECKOUT_POLICIES,
   PLUGIN_API_ROUTE_METHODS,
 } from "../constants.js";
+import type { PluginCompanySettingsShape } from "../types/plugin.js";
 
 const pluginMemoryVisibilitySchema = z.enum(["private", "shared"]);
 const pluginMemoryNamespacePolicySchema = z.object({
@@ -38,7 +39,7 @@ export const pluginCompanySettingsJsonSchema = z.object({
   }).optional(),
 });
 
-export type PluginCompanySettingsJson = z.infer<typeof pluginCompanySettingsJsonSchema>;
+export type PluginCompanySettingsJson = z.infer<typeof pluginCompanySettingsJsonSchema> & PluginCompanySettingsShape;
 
 // ---------------------------------------------------------------------------
 // JSON Schema placeholder – a permissive validator for JSON Schema objects

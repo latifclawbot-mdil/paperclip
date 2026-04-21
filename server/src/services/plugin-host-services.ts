@@ -752,6 +752,7 @@ export function buildHostServices(
         return stateStore.get(pluginId, params.scopeKind as any, params.stateKey, {
           scopeId: params.scopeId,
           namespace: params.namespace,
+          companyId: params.companyId,
         });
       },
       async set(params) {
@@ -761,12 +762,14 @@ export function buildHostServices(
           namespace: params.namespace,
           stateKey: params.stateKey,
           value: params.value,
+          companyId: params.companyId,
         });
       },
       async delete(params) {
         await stateStore.delete(pluginId, params.scopeKind as any, params.stateKey, {
           scopeId: params.scopeId,
           namespace: params.namespace,
+          companyId: params.companyId,
         });
       },
     },

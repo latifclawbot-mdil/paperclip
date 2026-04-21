@@ -162,12 +162,17 @@ export function resolveEffectiveCapabilities(
   manifest: PaperclipPluginManifestV1,
   policy?: PluginCapabilityPolicy,
 ): PluginCapability[] {
+  const mode = policy?.mode ?? "inherit";
   const grants = policy?.grants;
   if (!grants) {
-    return [...manifest.capabilities];
+    return mode === "override" ? [] : [...manifest.capabilities];
   }
 
-  return manifest.capabilities.filter((capability) => grants[capability] === true);
+  if (mode === "override") {
+    return manifest.capabilities.filter((capability) => grants[capability] === true);
+  }
+
+  return manifest.capabilities.filter((capability) => grants[capability] !== false);
 }
 
 // ---------------------------------------------------------------------------

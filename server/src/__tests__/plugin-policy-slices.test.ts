@@ -8,6 +8,7 @@ import {
   pluginCapabilityValidator,
   resolveEffectiveCapabilities,
 } from "../services/plugin-capability-validator.js";
+import { forbidden } from "../errors.js";
 
 const baseManifest: PaperclipPluginManifestV1 = {
   id: "acme.plugin",
@@ -87,6 +88,52 @@ describe("plugin memory policy enforcement", () => {
     } as any)).rejects.toThrow(/agent/);
   });
 
+  it("rejects get when policy forbids that scope", async () => {
+    const store = pluginStateStore(
+      {
+        select: () => ({
+          from: (_table: unknown) => ({
+            where: async () => [],
+          }),
+        }),
+      } as any,
+      {
+        resolveCompanySettings: async () => ({
+          memoryPolicy: {
+            denyScopes: ["agent"],
+          },
+        }),
+      },
+    );
+
+    await expect(store.get("plugin-1", "agent", "secret", {
+      companyId: "company-1",
+      scopeId: "agent-1",
+    })).rejects.toThrow(/agent/);
+  });
+
+  it("rejects delete when policy forbids that scope", async () => {
+    const store = pluginStateStore(
+      {
+        delete: () => ({
+          where: async () => undefined,
+        }),
+      } as any,
+      {
+        resolveCompanySettings: async () => ({
+          memoryPolicy: {
+            denyScopes: ["agent"],
+          },
+        }),
+      },
+    );
+
+    await expect(store.delete("plugin-1", "agent", "secret", {
+      companyId: "company-1",
+      scopeId: "agent-1",
+    })).rejects.toThrow(/agent/);
+  });
+
   it("rejects broad list operations when policy forbids that scope", async () => {
     const store = pluginStateStore(
       {
@@ -144,8 +191,18 @@ describe("plugin capability inheritance", () => {
     expect(resolveEffectiveCapabilities(baseManifest)).toEqual(baseManifest.capabilities);
   });
 
-  it("returns intersection when policy grants subset exists", () => {
+  it("inherit mode only strips explicit false grants", () => {
     expect(resolveEffectiveCapabilities(baseManifest, {
+      mode: "inherit",
+      grants: {
+        "issues.update": false,
+      },
+    })).toEqual(["plugin.state.read", "plugin.state.write", "issues.read"]);
+  });
+
+  it("override mode returns only explicit true grants", () => {
+    expect(resolveEffectiveCapabilities(baseManifest, {
+      mode: "override",
       grants: {
         "issues.read": true,
         "issues.update": false,
@@ -154,11 +211,18 @@ describe("plugin capability inheritance", () => {
     })).toEqual(["plugin.state.read", "issues.read"]);
   });
 
+  it("override mode with no grants returns empty capabilities", () => {
+    expect(resolveEffectiveCapabilities(baseManifest, {
+      mode: "override",
+    })).toEqual([]);
+  });
+
   it("validator checks operations against effective capabilities", () => {
     const validator = pluginCapabilityValidator();
     const effectiveManifest = {
       ...baseManifest,
       capabilities: resolveEffectiveCapabilities(baseManifest, {
+        mode: "override",
         grants: { "issues.read": true },
       }),
     };
@@ -173,10 +237,11 @@ describe("plugin capability inheritance", () => {
     const workerManager = { getWorker: vi.fn(() => null) };
     const hostServicesDisposers = new Map<string, () => void>();
     const manifest = baseManifest;
-    const policy: PluginCompanySettingsJson = {
+    const installedSettings: PluginCompanySettingsJson = {
       capabilityPolicy: {
+        mode: "inherit",
         grants: {
-          "issues.read": true,
+          "plugin.state.write": false,
           "issues.update": false,
         },
       },
@@ -190,12 +255,12 @@ describe("plugin capability inheritance", () => {
     hostServicesDisposers.set("plugin-1", () => services.dispose());
     createHostClientHandlers({
       pluginId: "plugin-1",
-      capabilities: resolveEffectiveCapabilities(manifest, policy.capabilityPolicy),
+      capabilities: resolveEffectiveCapabilities(manifest, installedSettings.capabilityPolicy),
       services,
     });
 
     expect(createHostClientHandlers).toHaveBeenCalledWith(expect.objectContaining({
-      capabilities: ["issues.read"],
+      capabilities: ["plugin.state.read", "issues.read"],
     }));
   });
 });

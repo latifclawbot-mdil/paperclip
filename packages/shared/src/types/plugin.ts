@@ -260,10 +260,18 @@ export interface PluginMemoryPolicy {
 
 export interface PluginCapabilityPolicy {
   mode?: "inherit" | "override";
+  /**
+   * inherit: start from manifest capabilities and only remove explicit false entries.
+   * override: ignore undeclared policy defaults and allow only explicit true entries.
+   */
   grants?: Partial<Record<PluginCapability, boolean>>;
 }
 
-export interface PluginCompanySettingsJson {
+/**
+ * Company-scoped plugin policy settings stored in JSON.
+ * Canonical runtime type lives in validators/plugin.ts via the schema export.
+ */
+export interface PluginCompanySettingsShape {
   memoryPolicy?: PluginMemoryPolicy;
   capabilityPolicy?: PluginCapabilityPolicy;
 }

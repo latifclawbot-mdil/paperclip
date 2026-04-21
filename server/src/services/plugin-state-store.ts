@@ -176,9 +176,10 @@ export function pluginStateStore(db: Db, options: PluginStateStoreOptions = {}) 
       {
         scopeId,
         namespace = DEFAULT_NAMESPACE,
-      }: { scopeId?: string; namespace?: string } = {},
+        companyId,
+      }: { scopeId?: string; namespace?: string; companyId?: string } = {},
     ): Promise<unknown> => {
-      await assertScopeAllowed(pluginId, scopeKind, namespace, undefined);
+      await assertScopeAllowed(pluginId, scopeKind, namespace, { companyId });
       const rows = await db
         .select()
         .from(pluginState)
@@ -253,9 +254,10 @@ export function pluginStateStore(db: Db, options: PluginStateStoreOptions = {}) 
       {
         scopeId,
         namespace = DEFAULT_NAMESPACE,
-      }: { scopeId?: string; namespace?: string } = {},
+        companyId,
+      }: { scopeId?: string; namespace?: string; companyId?: string } = {},
     ): Promise<void> => {
-      await assertScopeAllowed(pluginId, scopeKind, namespace, undefined);
+      await assertScopeAllowed(pluginId, scopeKind, namespace, { companyId });
       await db
         .delete(pluginState)
         .where(scopeConditions(pluginId, scopeKind, scopeId, namespace, stateKey));
