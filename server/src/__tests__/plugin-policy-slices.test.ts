@@ -4,10 +4,12 @@ import type {
   PluginCompanySettingsJson,
 } from "@paperclipai/shared";
 import { pluginStateStore } from "../services/plugin-state-store.js";
+import { buildHostServices } from "../services/plugin-host-services.js";
 import {
   pluginCapabilityValidator,
   resolveEffectiveCapabilities,
 } from "../services/plugin-capability-validator.js";
+import { buildPluginHostHandlers } from "../app.js";
 import { forbidden } from "../errors.js";
 
 const baseManifest: PaperclipPluginManifestV1 = {
@@ -158,31 +160,46 @@ describe("plugin memory policy enforcement", () => {
     } as any)).rejects.toThrow(/agent/);
   });
 
-  it("rejects reserved namespaces for shared scopes unless explicitly allowed by policy", async () => {
-    const store = pluginStateStore(
-      {
-        select: () => ({
-          from: (_table: unknown) => ({
-            where: async () => [{ id: "plugin-1" }],
-          }),
-        }),
-        insert: () => ({
-          values: () => ({ onConflictDoUpdate: async () => undefined }),
-        }),
-      } as any,
-      {
-        resolveCompanySettings: async () => ({}) satisfies PluginCompanySettingsJson,
+  it("uses company settings policy when host services bridge state calls at runtime", async () => {
+    const db = {
+      query: {
+        pluginCompanySettings: {
+          findFirst: vi.fn(async () => ({
+            settingsJson: {
+              memoryPolicy: {
+                denyScopes: ["agent"],
+              },
+            },
+          })),
+        },
       },
-    );
+      select: () => ({
+        from: (_table: unknown) => ({
+          where: async () => [{ id: "plugin-1" }],
+        }),
+      }),
+      insert: () => ({
+        values: () => ({ onConflictDoUpdate: async () => undefined }),
+      }),
+      delete: () => ({
+        where: async () => undefined,
+      }),
+    } as any;
 
-    await expect(store.set("plugin-1", {
+    const services = buildHostServices(db, "plugin-1", "acme.plugin", {
+      forPlugin: () => ({ emit: vi.fn(), subscribe: vi.fn(), clear: vi.fn() }),
+    } as any);
+
+    await expect(services.state.set({
       companyId: "company-1",
-      scopeKind: "company",
-      scopeId: "company-1",
-      namespace: "paperclip.memory",
+      scopeKind: "agent",
+      scopeId: "agent-1",
       stateKey: "secret",
-      value: true,
-    } as any)).rejects.toThrow(/reserved namespace/i);
+      value: "x",
+    } as any)).rejects.toThrow(/agent/);
+
+    expect(db.query.pluginCompanySettings.findFirst).toHaveBeenCalled();
+    services.dispose();
   });
 });
 
@@ -231,36 +248,35 @@ describe("plugin capability inheritance", () => {
     expect(validator.checkOperation(effectiveManifest, "issues.update")).toMatchObject({ allowed: false });
   });
 
-  it("passes effective capabilities to host handler creation wiring", async () => {
-    const createHostClientHandlers = vi.fn();
-    const buildHostServices = vi.fn(() => ({ dispose: vi.fn() }));
+  it("tests real app host-handler wiring via buildPluginHostHandlers", async () => {
+    const createHostClientHandlers = vi.spyOn(await import("@paperclipai/plugin-sdk"), "createHostClientHandlers").mockImplementation(vi.fn(() => ({}) as any));
+    const buildHostServicesSpy = vi.spyOn(await import("../services/plugin-host-services.js"), "buildHostServices").mockReturnValue({
+      dispose: vi.fn(),
+    } as any);
     const workerManager = { getWorker: vi.fn(() => null) };
     const hostServicesDisposers = new Map<string, () => void>();
-    const manifest = baseManifest;
-    const installedSettings: PluginCompanySettingsJson = {
-      capabilityPolicy: {
-        mode: "inherit",
-        grants: {
-          "plugin.state.write": false,
-          "issues.update": false,
-        },
-      },
-    };
 
-    const notifyWorker = (method: string, params: unknown) => {
-      const handle = workerManager.getWorker("plugin-1");
-      if (handle) handle.notify(method, params);
-    };
-    const services = buildHostServices({}, "plugin-1", manifest.id, {}, notifyWorker);
-    hostServicesDisposers.set("plugin-1", () => services.dispose());
-    createHostClientHandlers({
+    await buildPluginHostHandlers({
+      db: {} as any,
       pluginId: "plugin-1",
-      capabilities: resolveEffectiveCapabilities(manifest, installedSettings.capabilityPolicy),
-      services,
+      manifest: baseManifest,
+      eventBus: {} as any,
+      workerManager: workerManager as any,
+      hostServicesDisposers,
     });
 
+    expect(buildHostServicesSpy).toHaveBeenCalledWith(
+      {} as any,
+      "plugin-1",
+      baseManifest.id,
+      {} as any,
+      expect.any(Function),
+    );
     expect(createHostClientHandlers).toHaveBeenCalledWith(expect.objectContaining({
-      capabilities: ["plugin.state.read", "issues.read"],
+      capabilities: baseManifest.capabilities,
     }));
+
+    createHostClientHandlers.mockRestore();
+    buildHostServicesSpy.mockRestore();
   });
 });

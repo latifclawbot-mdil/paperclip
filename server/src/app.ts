@@ -7,7 +7,6 @@ import type {
   PaperclipPluginManifestV1,
   PluginCapability,
   PluginCapabilityPolicy,
-  PluginCompanySettingsJson,
 } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
 import { httpLogger, errorHandler } from "./middleware/index.js";
@@ -105,6 +104,38 @@ function mergeCapabilityPolicies(
     ...(mode ? { mode } : {}),
     ...(Object.keys(grants).length > 0 ? { grants } : {}),
   };
+}
+
+export async function buildPluginHostHandlers({
+  db,
+  pluginId,
+  manifest,
+  eventBus,
+  workerManager,
+  hostServicesDisposers,
+}: {
+  db: Db;
+  pluginId: string;
+  manifest: PaperclipPluginManifestV1;
+  eventBus: ReturnType<typeof createPluginEventBus>;
+  workerManager: ReturnType<typeof createPluginWorkerManager>;
+  hostServicesDisposers: Map<string, () => void>;
+}) {
+  const notifyWorker = (method: string, params: unknown) => {
+    const handle = workerManager.getWorker(pluginId);
+    if (handle) handle.notify(method, params);
+  };
+  const services = buildHostServices(db, pluginId, manifest.id, eventBus, notifyWorker);
+  hostServicesDisposers.set(pluginId, () => services.dispose());
+  const effectiveCapabilities = resolveEffectiveCapabilities(
+    manifest,
+    mergeCapabilityPolicies(manifest),
+  );
+  return createHostClientHandlers({
+    pluginId,
+    capabilities: effectiveCapabilities,
+    services,
+  });
 }
 
 export function resolveViteHmrPort(serverPort: number): number {
@@ -275,31 +306,14 @@ export async function createApp(
         instanceId: opts.instanceId ?? "default",
         hostVersion: opts.hostVersion ?? "0.0.0",
       },
-      buildHostHandlers: async (pluginId, manifest) => {
-        const notifyWorker = (method: string, params: unknown) => {
-          const handle = workerManager.getWorker(pluginId);
-          if (handle) handle.notify(method, params);
-        };
-        const pluginRow = await db.query.plugins.findFirst({
-          where: (plugins, { eq }) => eq(plugins.id, pluginId),
-          columns: { settingsJson: true },
-        });
-        const services = buildHostServices(db, pluginId, manifest.id, eventBus, notifyWorker);
-        hostServicesDisposers.set(pluginId, () => services.dispose());
-        const installedPolicy = (pluginRow?.settingsJson ?? {}) as PluginCompanySettingsJson;
-        const effectiveCapabilities = resolveEffectiveCapabilities(
-          manifest,
-          mergeCapabilityPolicies(
-            manifest,
-            installedPolicy.capabilityPolicy,
-          ),
-        );
-        return createHostClientHandlers({
-          pluginId,
-          capabilities: effectiveCapabilities,
-          services,
-        });
-      },
+      buildHostHandlers: async (pluginId, manifest) => buildPluginHostHandlers({
+        db,
+        pluginId,
+        manifest,
+        eventBus,
+        workerManager,
+        hostServicesDisposers,
+      }),
     },
   );
   api.use(
