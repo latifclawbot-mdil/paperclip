@@ -22,6 +22,7 @@
 import type {
   PluginCapability,
   PaperclipPluginManifestV1,
+  PluginCapabilityPolicy,
   PluginUiSlotType,
   PluginLauncherPlacementZone,
 } from "@paperclipai/shared";
@@ -156,6 +157,18 @@ const FEATURE_CAPABILITIES: Record<string, PluginCapability> = {
   webhooks: "webhooks.receive",
   database: "database.namespace.migrate",
 };
+
+export function resolveEffectiveCapabilities(
+  manifest: PaperclipPluginManifestV1,
+  policy?: PluginCapabilityPolicy,
+): PluginCapability[] {
+  const grants = policy?.grants;
+  if (!grants) {
+    return [...manifest.capabilities];
+  }
+
+  return manifest.capabilities.filter((capability) => grants[capability] === true);
+}
 
 // ---------------------------------------------------------------------------
 // Result types
