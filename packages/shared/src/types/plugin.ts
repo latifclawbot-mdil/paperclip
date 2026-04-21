@@ -242,6 +242,32 @@ export interface PluginApiRouteDeclaration {
   companyResolution?: PluginApiRouteCompanyResolution;
 }
 
+export type PluginMemoryVisibility = "private" | "shared";
+
+export interface PluginMemoryNamespacePolicy {
+  visibility?: PluginMemoryVisibility;
+  allowedScopes?: PluginStateScopeKind[];
+  deniedScopes?: PluginStateScopeKind[];
+  allowReserved?: boolean;
+}
+
+export interface PluginMemoryPolicy {
+  defaultVisibility?: PluginMemoryVisibility;
+  allowSharedScopes?: PluginStateScopeKind[];
+  denyScopes?: PluginStateScopeKind[];
+  namespacePolicies?: Record<string, PluginMemoryNamespacePolicy>;
+}
+
+export interface PluginCapabilityPolicy {
+  mode?: "inherit" | "override";
+  grants?: Partial<Record<PluginCapability, boolean>>;
+}
+
+export interface PluginCompanySettingsJson {
+  memoryPolicy?: PluginMemoryPolicy;
+  capabilityPolicy?: PluginCapabilityPolicy;
+}
+
 // ---------------------------------------------------------------------------
 // Plugin Manifest V1
 // ---------------------------------------------------------------------------

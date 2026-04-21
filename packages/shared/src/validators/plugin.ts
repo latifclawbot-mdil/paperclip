@@ -17,6 +17,29 @@ import {
   PLUGIN_API_ROUTE_METHODS,
 } from "../constants.js";
 
+const pluginMemoryVisibilitySchema = z.enum(["private", "shared"]);
+const pluginMemoryNamespacePolicySchema = z.object({
+  visibility: pluginMemoryVisibilitySchema.optional(),
+  allowedScopes: z.array(z.enum(PLUGIN_STATE_SCOPE_KINDS)).optional(),
+  deniedScopes: z.array(z.enum(PLUGIN_STATE_SCOPE_KINDS)).optional(),
+  allowReserved: z.boolean().optional(),
+});
+
+export const pluginCompanySettingsJsonSchema = z.object({
+  memoryPolicy: z.object({
+    defaultVisibility: pluginMemoryVisibilitySchema.optional(),
+    allowSharedScopes: z.array(z.enum(PLUGIN_STATE_SCOPE_KINDS)).optional(),
+    denyScopes: z.array(z.enum(PLUGIN_STATE_SCOPE_KINDS)).optional(),
+    namespacePolicies: z.record(pluginMemoryNamespacePolicySchema).optional(),
+  }).optional(),
+  capabilityPolicy: z.object({
+    mode: z.enum(["inherit", "override"]).optional(),
+    grants: z.record(z.enum(PLUGIN_CAPABILITIES), z.boolean()).optional(),
+  }).optional(),
+});
+
+export type PluginCompanySettingsJson = z.infer<typeof pluginCompanySettingsJsonSchema>;
+
 // ---------------------------------------------------------------------------
 // JSON Schema placeholder – a permissive validator for JSON Schema objects
 // ---------------------------------------------------------------------------
