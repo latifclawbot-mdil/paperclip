@@ -103,6 +103,16 @@ const OPERATION_CAPABILITIES: Record<string, readonly PluginCapability[]> = {
   // Agent tools
   "agent.tools.register": ["agent.tools.register"],
   "agent.tools.execute": ["agent.tools.register"],
+
+  // Environment runtime drivers
+  "environment.validateConfig": ["environment.drivers.register"],
+  "environment.probe": ["environment.drivers.register"],
+  "environment.acquireLease": ["environment.drivers.register"],
+  "environment.resumeLease": ["environment.drivers.register"],
+  "environment.releaseLease": ["environment.drivers.register"],
+  "environment.destroyLease": ["environment.drivers.register"],
+  "environment.realizeWorkspace": ["environment.drivers.register"],
+  "environment.execute": ["environment.drivers.register"],
 };
 
 /**
@@ -157,6 +167,7 @@ const FEATURE_CAPABILITIES: Record<string, PluginCapability> = {
   jobs: "jobs.schedule",
   webhooks: "webhooks.receive",
   database: "database.namespace.migrate",
+  environmentDrivers: "environment.drivers.register",
 };
 
 export function resolveEffectiveCapabilities(
